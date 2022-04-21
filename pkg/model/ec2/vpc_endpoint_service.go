@@ -54,7 +54,7 @@ type VPCEndpointServiceSpec struct {
 	// whether requests from service consumers to create an endpoint to the service must be accepted
 	AcceptanceRequired *bool `json:"acceptance_required"`
 
-	NetworkLoadBalancerArns []string `json:"network_load_balancer_arns"`
+	NetworkLoadBalancerArns []core.StringToken `json:"network_load_balancer_arns"`
 
 	PrivateDNSName *string `json:"private_dns_name"`
 

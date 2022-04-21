@@ -3,6 +3,7 @@ package networking
 import (
 	"context"
 
+	awssdk "github.com/aws/aws-sdk-go/aws"
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/aws/services"
@@ -59,5 +60,25 @@ func (m *defaultVPCEndpointServiceManager) FetchVPCESInfosByID(ctx context.Conte
 }
 
 func (m *defaultVPCEndpointServiceManager) FetchVPCESInfosByRequest(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServiceConfigurationsInput) (map[string]VPCEndpointServiceInfo, error) {
-	return nil, nil
+	esInfosByID, err := m.fetchESInfosFromAWS(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	// TODO caching??
+	// m.saveSGInfosToCache(sgInfosByID)
+	return esInfosByID, nil
+}
+
+func (m *defaultVPCEndpointServiceManager) fetchESInfosFromAWS(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServiceConfigurationsInput) (map[string]VPCEndpointServiceInfo, error) {
+	endpointServices, err := m.ec2Client.DescribeVpcEndpointServiceConfigurations(req)
+	if err != nil {
+		return nil, err
+	}
+	esInfoByID := make(map[string]VPCEndpointServiceInfo, len(endpointServices.ServiceConfigurations))
+	for _, sc := range endpointServices.ServiceConfigurations {
+		esID := awssdk.StringValue(sc.ServiceId)
+		esInfo := NewRawVPCEndpointServiceInfo(sc)
+		esInfoByID[esID] = esInfo
+	}
+	return esInfoByID, nil
 }
