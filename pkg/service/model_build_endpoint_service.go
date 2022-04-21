@@ -10,7 +10,19 @@ import (
 	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
 )
 
+const (
+	defaultRawEnabled string = "false"
+)
+
 func (t *defaultModelBuildTask) buildEndpointService(ctx context.Context) error {
+	enabled, err := t.buildEnabled(ctx)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+
 	acceptanceRequired, err := t.buildAcceptanceRequired(ctx)
 	if err != nil {
 		return err
@@ -43,6 +55,20 @@ func (t *defaultModelBuildTask) buildEndpointService(ctx context.Context) error 
 	_ = ec2model.NewVPCEndpointService(t.stack, "TODO", spec)
 
 	return nil
+}
+
+func (t *defaultModelBuildTask) buildEnabled(_ context.Context) (bool, error) {
+	rawEnabled := defaultRawEnabled
+	_ = t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServiceEnabled, &rawEnabled, t.service.Annotations)
+	// We could use strconv here but we want to be highly explicit
+	switch rawEnabled {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.Errorf("invalid service annotation %v, value must be one of [%v, %v]", annotations.SvcLBSuffixEndpointServiceEnabled, true, false)
+	}
 }
 
 func (t *defaultModelBuildTask) buildAcceptanceRequired(_ context.Context) (bool, error) {

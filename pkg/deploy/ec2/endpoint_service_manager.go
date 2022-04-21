@@ -2,13 +2,22 @@ package ec2
 
 import (
 	"context"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go/aws"
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/aws/services"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/deploy/tracking"
 	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
+	"sigs.k8s.io/aws-load-balancer-controller/pkg/networking"
+	"sigs.k8s.io/aws-load-balancer-controller/pkg/runtime"
+)
+
+const (
+	defaultWaitESDeletionPollInterval = 2 * time.Second
+	defaultWaitESDeletionTimeout      = 2 * time.Minute
 )
 
 // abstraction around endpoint service operations for EC2.
@@ -20,6 +29,8 @@ type EndpointServiceManager interface {
 	ListEndpointServices(ctx context.Context, tagFilters ...tracking.TagFilter) ([]ec2model.VPCEndpointService, error)
 
 	Create(ctx context.Context, resSG *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
+
+	Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error
 }
 
 // NewdefaultEndpointServiceManager constructs new defaultEndpointServiceManager.
@@ -29,6 +40,9 @@ func NewDefaultEndpointServiceManager(ec2Client services.EC2, vpcID string, logg
 		vpcID:            vpcID,
 		logger:           logger,
 		trackingProvider: trackingProvider,
+
+		waitESDeletionPollInterval: defaultWaitESDeletionPollInterval,
+		waitESDeletionTimeout:      defaultWaitESDeletionTimeout,
 	}
 }
 
@@ -40,6 +54,9 @@ type defaultEndpointServiceManager struct {
 	vpcID            string
 	logger           logr.Logger
 	trackingProvider tracking.Provider
+
+	waitESDeletionPollInterval time.Duration
+	waitESDeletionTimeout      time.Duration
 }
 
 func (m *defaultEndpointServiceManager) ReconcileTags(ctx context.Context, resID string, desiredTags map[string]string, opts ...ReconcileTagsOption) error {
@@ -90,10 +107,28 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 		"resourceID", resSG.ID(),
 		"serviceID", sgID)
 
-	// TODO
-	// Do we need to reconcile here?
-
 	return ec2model.VPCEndpointServiceStatus{
 		ServiceID: sgID,
 	}, nil
+}
+
+func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error {
+	req := &ec2sdk.DeleteVpcEndpointServiceConfigurationsInput{
+		ServiceIds: awssdk.StringSlice(
+			[]string{sdkES.ServiceID},
+		),
+	}
+
+	m.logger.Info("deleting VPCEndpointService",
+		"serviceId", sdkES.ServiceID)
+	if err := runtime.RetryImmediateOnError(m.waitESDeletionPollInterval, m.waitESDeletionTimeout, isSecurityGroupDependencyViolationError, func() error {
+		_, err := m.ec2Client.DeleteVpcEndpointServiceConfigurationsWithContext(ctx, req)
+		return err
+	}); err != nil {
+		return errors.Wrap(err, "failed to delete VPCEndpointService")
+	}
+	m.logger.Info("deleted VPCEndpointService",
+		"serviceId", sdkES.ServiceID)
+
+	return nil
 }

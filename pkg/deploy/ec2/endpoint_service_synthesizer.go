@@ -47,7 +47,7 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 		return err
 	}
 
-	_, unmatchedResESs, _, err := matchResAndSDKEndpointServices(resESs, sdkESs, s.trackingProvider.ResourceIDTagKey())
+	_, unmatchedResESs, unmatchedSDKESs, err := matchResAndSDKEndpointServices(resESs, sdkESs, s.trackingProvider.ResourceIDTagKey())
 	if err != nil {
 		return err
 	}
@@ -68,8 +68,12 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 	// 	resAndSDKSG.resSG.SetStatus(sgStatus)
 	// }
 
-	// TODO
-	// when do we delete?
+	for _, sdkSG := range unmatchedSDKESs {
+		if err := s.esManager.Delete(ctx, sdkSG); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
