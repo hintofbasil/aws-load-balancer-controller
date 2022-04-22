@@ -29,7 +29,9 @@ type EndpointServiceManager interface {
 	// ListEndpointServices returns VPC Endpoint Services that matches any of the tagging requirements.
 	ListEndpointServices(ctx context.Context, tagFilters ...tracking.TagFilter) ([]ec2model.VPCEndpointService, error)
 
-	Create(ctx context.Context, resSG *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
+	Create(ctx context.Context, resES *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
+
+	Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error)
 
 	Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error
 
@@ -129,6 +131,10 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 	}, nil
 }
 
+func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error) {
+
+}
+
 func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error {
 	req := &ec2sdk.DeleteVpcEndpointServiceConfigurationsInput{
 		ServiceIds: awssdk.StringSlice(
@@ -162,7 +168,7 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 	sdkPrinciples := sets.NewString(permissionsInfo.AllowedPrincipals...)
 	resPrinciples := sets.NewString(permissions.Spec.AllowedPrinciples...)
 
-	// TODO are these the right way around?
+	// TODO move this to algorithm
 	var addPrinciples, removePrinciples []*string
 	for _, principle := range resPrinciples.Difference(sdkPrinciples).List() {
 		addPrinciples = append(addPrinciples, &principle)
