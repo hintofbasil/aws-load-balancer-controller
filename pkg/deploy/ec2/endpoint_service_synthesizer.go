@@ -52,13 +52,21 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 		return err
 	}
 
+	// We delete before we create as we can only have a single VPC end point per LB
+	for _, sdkSG := range unmatchedSDKESs {
+		if err := s.esManager.Delete(ctx, sdkSG); err != nil {
+			return err
+		}
+	}
+
 	for _, resES := range unmatchedResESs {
-		sgStatus, err := s.esManager.Create(ctx, resES)
+		esStatus, err := s.esManager.Create(ctx, resES)
 		if err != nil {
 			return err
 		}
-		resES.SetStatus(sgStatus)
+		resES.SetStatus(esStatus)
 	}
+
 	// TODO
 	// for _, resAndSDKSG := range matchedResAndSDKESs {
 	// 	sgStatus, err := s.sgManager.Update(ctx, resAndSDKSG.resSG, resAndSDKSG.sdkSG)
@@ -67,12 +75,6 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 	// 	}
 	// 	resAndSDKSG.resSG.SetStatus(sgStatus)
 	// }
-
-	for _, sdkSG := range unmatchedSDKESs {
-		if err := s.esManager.Delete(ctx, sdkSG); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }

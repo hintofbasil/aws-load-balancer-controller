@@ -69,3 +69,23 @@ type VPCEndpointServiceStatus struct {
 
 	BaseEndpointDnsNames []string `json:"base_endpoint_dns_names"`
 }
+
+type VPCEndpointServicePermissions struct {
+	core.ResourceMeta `json:"-"`
+	Spec              VPCEndpointServicePermissionsSpec `json:"spec"`
+}
+
+// NewVPCEndpointService constructs new VPCEndpointServicePermissions resource.
+func NewVPCEndpointServicePermissions(stack core.Stack, id string, spec VPCEndpointServicePermissionsSpec) *VPCEndpointServicePermissions {
+	esPermissions := &VPCEndpointServicePermissions{
+		ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointServicePermissions", id),
+		Spec:         spec,
+	}
+	stack.AddResource(esPermissions)
+	return esPermissions
+}
+
+type VPCEndpointServicePermissionsSpec struct {
+	AllowedPrinciples []string         `json:"allowed_principles"`
+	ServiceId         core.StringToken `json:"service_id"`
+}

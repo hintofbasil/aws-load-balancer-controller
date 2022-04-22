@@ -27,32 +27,37 @@ func (t *defaultModelBuildTask) buildEndpointService(ctx context.Context) error 
 	if err != nil {
 		return err
 	}
-	// TODO figure out how to handle allowed Principles
-	// allowedPrinciples, err := t.buildAllowedPrinciples(ctx)
-	// if err != nil {
-	// 	return err
-	// }
 
-	// TODO this throws a "LoadBalancer is not fulfilled yet" error
-	// Try hard coding the LB ARN
-	// loadBalancerArn, err := t.loadBalancer.LoadBalancerARN().Resolve(ctx)
+	allowedPrinciples, err := t.buildAllowedPrinciples(ctx)
+	if err != nil {
+		return err
+	}
 
 	privateDNSName, err := t.buildPrivateDNSName(ctx)
 	if err != nil {
 		return err
 	}
+
 	tags, err := t.buildListenerTags(ctx)
 	if err != nil {
 		return err
 	}
-	spec := ec2model.VPCEndpointServiceSpec{
+
+	esSpec := ec2model.VPCEndpointServiceSpec{
 		AcceptanceRequired:      &acceptanceRequired,
 		NetworkLoadBalancerArns: []core.StringToken{t.loadBalancer.LoadBalancerARN()},
-		PrivateDNSName:          &privateDNSName,
+		PrivateDNSName:          privateDNSName,
 		Tags:                    tags,
 	}
 
-	_ = ec2model.NewVPCEndpointService(t.stack, "TODO", spec)
+	es := ec2model.NewVPCEndpointService(t.stack, "VPCEndpointService", esSpec)
+
+	espSpec := ec2model.VPCEndpointServicePermissionsSpec{
+		AllowedPrinciples: allowedPrinciples,
+		ServiceId:         es.ServiceID(),
+	}
+
+	_ = ec2model.NewVPCEndpointServicePermissions(t.stack, "VPCEndpointServicePermissions", espSpec)
 
 	return nil
 }
@@ -60,7 +65,7 @@ func (t *defaultModelBuildTask) buildEndpointService(ctx context.Context) error 
 func (t *defaultModelBuildTask) buildEnabled(_ context.Context) (bool, error) {
 	rawEnabled := defaultRawEnabled
 	_ = t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServiceEnabled, &rawEnabled, t.service.Annotations)
-	// We could use strconv here but we want to be highly explicit
+	// We could use strconv here but we want to be explicit
 	switch rawEnabled {
 	case "true":
 		return true, nil
@@ -74,7 +79,7 @@ func (t *defaultModelBuildTask) buildEnabled(_ context.Context) (bool, error) {
 func (t *defaultModelBuildTask) buildAcceptanceRequired(_ context.Context) (bool, error) {
 	rawAcceptanceRequired := ""
 	_ = t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServiceAcceptanceRequired, &rawAcceptanceRequired, t.service.Annotations)
-	// We could use strconv here but we want to be highly explicit
+	// We could use strconv here but we want to be explicit
 	switch rawAcceptanceRequired {
 	case "true":
 		return true, nil
@@ -95,13 +100,10 @@ func (t *defaultModelBuildTask) buildAllowedPrinciples(_ context.Context) ([]str
 	return rawAllowedPrinciples, nil
 }
 
-func (t *defaultModelBuildTask) buildPrivateDNSName(_ context.Context) (string, error) {
+func (t *defaultModelBuildTask) buildPrivateDNSName(_ context.Context) (*string, error) {
 	rawPrivateDNSName := ""
-	_ = t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServicePrivateDNSName, &rawPrivateDNSName, t.service.Annotations)
-	if rawPrivateDNSName == "" {
-		return "", errors.Errorf("invalid service annotation %v, must not be empty", annotations.SvcLBSuffixEndpointServicePrivateDNSName)
+	if exists := t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServicePrivateDNSName, &rawPrivateDNSName, t.service.Annotations); !exists {
+		return nil, nil
 	}
-	return rawPrivateDNSName, nil
+	return &rawPrivateDNSName, nil
 }
-
-// TODO handle SvcLBSuffixEndpointServicePrivateDNSName

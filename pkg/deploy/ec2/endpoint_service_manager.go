@@ -8,6 +8,7 @@ import (
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/aws/services"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/deploy/tracking"
 	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
@@ -31,6 +32,8 @@ type EndpointServiceManager interface {
 	Create(ctx context.Context, resSG *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
 
 	Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error
+
+	ReconcilePermissions(ctx context.Context, serviceId string, permissions *ec2model.VPCEndpointServicePermissions) error
 }
 
 // NewdefaultEndpointServiceManager constructs new defaultEndpointServiceManager.
@@ -85,9 +88,14 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 		resolvedLoadBalancerArns = append(resolvedLoadBalancerArns, arn)
 	}
 
+	var privateDnsName *string
+	if resSG.Spec.PrivateDNSName != nil {
+		privateDnsName = awssdk.String(*resSG.Spec.PrivateDNSName)
+	}
+
 	req := ec2sdk.CreateVpcEndpointServiceConfigurationInput{
 		AcceptanceRequired:      awssdk.Bool(*resSG.Spec.AcceptanceRequired),
-		PrivateDnsName:          awssdk.String(*resSG.Spec.PrivateDNSName),
+		PrivateDnsName:          privateDnsName,
 		NetworkLoadBalancerArns: awssdk.StringSlice(resolvedLoadBalancerArns),
 		TagSpecifications: []*ec2sdk.TagSpecification{
 			{
@@ -102,13 +110,22 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 	if err != nil {
 		return ec2model.VPCEndpointServiceStatus{}, err
 	}
-	sgID := awssdk.StringValue(resp.ServiceConfiguration.ServiceId)
+	serviceID := awssdk.StringValue(resp.ServiceConfiguration.ServiceId)
 	m.logger.Info("created VpcEndpointService",
 		"resourceID", resSG.ID(),
-		"serviceID", sgID)
+		"serviceID", serviceID)
+
+	// TODO can we have multiple permissions objects?
+	// Yes, yes we can
+	var resESPermissions []*ec2model.VPCEndpointServicePermissions
+	resSG.Stack().ListResources(&resESPermissions)
+
+	for _, permissions := range resESPermissions {
+		m.ReconcilePermissions(ctx, serviceID, permissions)
+	}
 
 	return ec2model.VPCEndpointServiceStatus{
-		ServiceID: sgID,
+		ServiceID: serviceID,
 	}, nil
 }
 
@@ -131,4 +148,59 @@ func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networ
 		"serviceId", sdkES.ServiceID)
 
 	return nil
+}
+
+func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context, serviceId string, permissions *ec2model.VPCEndpointServicePermissions) error {
+	req := &ec2sdk.DescribeVpcEndpointServicePermissionsInput{
+		ServiceId: &serviceId,
+	}
+
+	permissionsInfo, err := m.fetchESPermissionInfosFromAWS(ctx, req)
+	if err != nil {
+		return err
+	}
+	sdkPrinciples := sets.NewString(permissionsInfo.AllowedPrincipals...)
+	resPrinciples := sets.NewString(permissions.Spec.AllowedPrinciples...)
+
+	// TODO are these the right way around?
+	var addPrinciples, removePrinciples []*string
+	for _, principle := range resPrinciples.Difference(sdkPrinciples).List() {
+		addPrinciples = append(addPrinciples, &principle)
+	}
+	for _, principle := range sdkPrinciples.Difference(resPrinciples).List() {
+		removePrinciples = append(removePrinciples, &principle)
+	}
+
+	modReq := &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
+		AddAllowedPrincipals:    addPrinciples,
+		RemoveAllowedPrincipals: removePrinciples,
+		ServiceId:               &serviceId,
+	}
+
+	if len(addPrinciples) > 0 || len(removePrinciples) > 0 {
+
+		m.logger.Info("modifying VpcEndpointService permissions",
+			"serviceID", serviceId,
+			"addPrinciples", addPrinciples,
+			"removePrinciples", removePrinciples,
+		)
+
+		_, err := m.ec2Client.ModifyVpcEndpointServicePermissionsWithContext(ctx, modReq)
+		if err != nil {
+			return err
+		}
+
+		m.logger.Info("modified VpcEndpointService permissions",
+			"serviceID", serviceId)
+	}
+
+	return nil
+}
+
+func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServicePermissionsInput) (networking.VPCEndpointServicePermissionsInfo, error) {
+	endpointServicePermissions, err := m.ec2Client.DescribeVpcEndpointServicePermissionsWithContext(ctx, req)
+	if err != nil {
+		return networking.VPCEndpointServicePermissionsInfo{}, err
+	}
+	return networking.NewRawVPCEndpointServicePermissionsInfo(endpointServicePermissions), nil
 }
