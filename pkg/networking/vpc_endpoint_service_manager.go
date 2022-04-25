@@ -70,14 +70,14 @@ func (m *defaultVPCEndpointServiceManager) FetchVPCESInfosByRequest(ctx context.
 }
 
 func (m *defaultVPCEndpointServiceManager) fetchESInfosFromAWS(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServiceConfigurationsInput) (map[string]VPCEndpointServiceInfo, error) {
-	endpointServices, err := m.ec2Client.DescribeVpcEndpointServiceConfigurations(req)
+	endpointServices, err := m.ec2Client.DescribeVpcEndpointServicesAsList(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	esInfoByID := make(map[string]VPCEndpointServiceInfo, len(endpointServices.ServiceConfigurations))
-	for _, sc := range endpointServices.ServiceConfigurations {
-		esID := awssdk.StringValue(sc.ServiceId)
-		esInfo := NewRawVPCEndpointServiceInfo(sc)
+	esInfoByID := make(map[string]VPCEndpointServiceInfo, len(endpointServices))
+	for _, es := range endpointServices {
+		esID := awssdk.StringValue(es.ServiceId)
+		esInfo := NewRawVPCEndpointServiceInfo(es)
 		esInfoByID[esID] = esInfo
 	}
 	return esInfoByID, nil
