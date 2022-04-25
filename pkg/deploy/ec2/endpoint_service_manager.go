@@ -118,6 +118,76 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 }
 
 func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error) {
+
+	m.logger.Info("Updating", "resES", resES, "sdkES", sdkES)
+
+	var resLBArnsRaw []string
+	for _, lb := range resES.Spec.NetworkLoadBalancerArns {
+		arn, err := lb.Resolve(ctx)
+		if err != nil {
+			return ec2model.VPCEndpointServiceStatus{}, err
+		}
+		resLBArnsRaw = append(resLBArnsRaw, arn)
+	}
+
+	sdkLBArns := sets.NewString(sdkES.NetworkLoadBalancerArns...)
+	resLBArns := sets.NewString(resLBArnsRaw...)
+
+	// TODO move this to algorithm
+	var addLBArns, removeLBArns []*string
+	for _, arn := range resLBArns.Difference(sdkLBArns).List() {
+		addLBArns = append(addLBArns, &arn)
+	}
+	for _, arn := range sdkLBArns.Difference(resLBArns).List() {
+		removeLBArns = append(removeLBArns, &arn)
+	}
+
+	var acceptanceRequired *bool
+	if *resES.Spec.AcceptanceRequired != sdkES.AcceptanceRequired {
+		acceptanceRequired = resES.Spec.AcceptanceRequired
+	}
+
+	var privateDNSName *string
+	var removePrivateDNSName *bool
+	if resES.Spec.PrivateDNSName == nil && sdkES.PrivateDNSName != nil {
+		removePrivateDNSName = newBoolPointer(true)
+	} else if resES.Spec.PrivateDNSName != sdkES.PrivateDNSName {
+		privateDNSName = resES.Spec.PrivateDNSName
+	}
+
+	if len(addLBArns) > 0 || len(removeLBArns) > 0 || acceptanceRequired != nil || privateDNSName != nil || removePrivateDNSName != nil {
+
+		serviceId := &sdkES.ServiceID
+
+		m.logger.Info(
+			"Updating VPCEndpointService",
+			"addLBArns", addLBArns,
+			"removeLBArns", removeLBArns,
+			"acceptanceRequired", acceptanceRequired,
+			"privateDNSName", privateDNSName,
+			"removePrivateDNSName", removePrivateDNSName,
+			"serviceId", serviceId,
+		)
+
+		req := ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+			AcceptanceRequired:            acceptanceRequired,
+			AddNetworkLoadBalancerArns:    addLBArns,
+			RemoveNetworkLoadBalancerArns: removeLBArns,
+			PrivateDnsName:                privateDNSName,
+			RemovePrivateDnsName:          removePrivateDNSName,
+			ServiceId:                     serviceId,
+		}
+
+		_, err := m.ec2Client.ModifyVpcEndpointServiceConfigurationWithContext(ctx, &req)
+		if err != nil {
+			return ec2model.VPCEndpointServiceStatus{}, err
+		}
+	} else {
+		m.logger.Info(
+			"Not updating VPCEndpointService",
+		)
+	}
+
 	return ec2model.VPCEndpointServiceStatus{
 		ServiceID: sdkES.ServiceID,
 	}, nil
@@ -212,4 +282,9 @@ func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx contex
 		return networking.VPCEndpointServicePermissionsInfo{}, err
 	}
 	return networking.NewRawVPCEndpointServicePermissionsInfo(endpointServicePermissions), nil
+}
+
+func newBoolPointer(value bool) *bool {
+	b := value
+	return &b
 }
