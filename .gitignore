@@ -1,18 +1,25 @@
-CONTRIBUTING.md
-LICENSE
-Makefile
-OWNERS
-PROJECT
-Pipfile
-Pipfile.lock
-README.md
-SECURITY_CONTACTS
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 bin
 build
-code-of-conduct.md
-cover.out
-docs
-helm
-mkdocs.yml
-scripts
-test
+
+# mkdocs generated live docs
+site
+
+# Test binary, build with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# editor and IDE paraphernalia
+.idea
+.vscode
+*.swp
+*.swo
+*~
