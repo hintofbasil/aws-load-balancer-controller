@@ -35,7 +35,7 @@ type EndpointServiceManager interface {
 
 	Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error
 
-	ReconcilePermissions(ctx context.Context, serviceId string, permissions *ec2model.VPCEndpointServicePermissions) error
+	ReconcilePermissions(ctx context.Context, permissions *ec2model.VPCEndpointServicePermissions) error
 }
 
 // NewdefaultEndpointServiceManager constructs new defaultEndpointServiceManager.
@@ -75,11 +75,6 @@ func (m *defaultEndpointServiceManager) ListEndpointServices(ctx context.Context
 func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error) {
 	sgTags := m.trackingProvider.ResourceTags(resSG.Stack(), resSG, resSG.Spec.Tags)
 	sdkTags := convertTagsToSDKTags(sgTags)
-	// TODO
-	// permissionInfos, err := buildIPPermissionInfos(resSG.Spec.Ingress)
-	// if err != nil {
-	// 	return ec2model.VPCEndpointServiceStatus{}, err
-	// }
 
 	var resolvedLoadBalancerArns []string
 	for _, unresolved := range resSG.Spec.NetworkLoadBalancerArns {
@@ -117,22 +112,15 @@ func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2mo
 		"resourceID", resSG.ID(),
 		"serviceID", serviceID)
 
-	// TODO can we have multiple permissions objects?
-	// Yes, yes we can
-	var resESPermissions []*ec2model.VPCEndpointServicePermissions
-	resSG.Stack().ListResources(&resESPermissions)
-
-	for _, permissions := range resESPermissions {
-		m.ReconcilePermissions(ctx, serviceID, permissions)
-	}
-
 	return ec2model.VPCEndpointServiceStatus{
 		ServiceID: serviceID,
 	}, nil
 }
 
 func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error) {
-
+	return ec2model.VPCEndpointServiceStatus{
+		ServiceID: sdkES.ServiceID,
+	}, nil
 }
 
 func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networking.VPCEndpointServiceInfo) error {
@@ -156,13 +144,23 @@ func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networ
 	return nil
 }
 
-func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context, serviceId string, permissions *ec2model.VPCEndpointServicePermissions) error {
+func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context, permissions *ec2model.VPCEndpointServicePermissions) error {
+	m.logger.Info("Reconciling Permissions")
+
+	serviceId, err := permissions.Spec.ServiceId.Resolve(ctx)
+	if err != nil {
+		m.logger.Info("Failed to resolve serviceId", "err", err)
+		return err
+	}
 	req := &ec2sdk.DescribeVpcEndpointServicePermissionsInput{
 		ServiceId: &serviceId,
 	}
 
+	m.logger.Info("Reconciling Permissions for service", "serviceId", serviceId)
+
 	permissionsInfo, err := m.fetchESPermissionInfosFromAWS(ctx, req)
 	if err != nil {
+		m.logger.Info("Error while fetching existing VPC endpoint service permissions")
 		return err
 	}
 	sdkPrinciples := sets.NewString(permissionsInfo.AllowedPrincipals...)
@@ -182,6 +180,11 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 		RemoveAllowedPrincipals: removePrinciples,
 		ServiceId:               &serviceId,
 	}
+
+	m.logger.Info("Build priciples",
+		"AddPrinciples", addPrinciples,
+		"RemovePrinciples", removePrinciples,
+	)
 
 	if len(addPrinciples) > 0 || len(removePrinciples) > 0 {
 

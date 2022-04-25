@@ -47,7 +47,7 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 		return err
 	}
 
-	_, unmatchedResESs, unmatchedSDKESs, err := matchResAndSDKEndpointServices(resESs, sdkESs, s.trackingProvider.ResourceIDTagKey())
+	matchedResAndSDKESs, unmatchedResESs, unmatchedSDKESs, err := matchResAndSDKEndpointServices(resESs, sdkESs, s.trackingProvider.ResourceIDTagKey())
 	if err != nil {
 		return err
 	}
@@ -67,14 +67,26 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 		resES.SetStatus(esStatus)
 	}
 
-	// TODO
-	// for _, resAndSDKSG := range matchedResAndSDKESs {
-	// 	sgStatus, err := s.sgManager.Update(ctx, resAndSDKSG.resSG, resAndSDKSG.sdkSG)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	resAndSDKSG.resSG.SetStatus(sgStatus)
-	// }
+	for _, pair := range matchedResAndSDKESs {
+		esStatus, err := s.esManager.Update(ctx, pair.res, pair.sdk)
+		if err != nil {
+			return err
+		}
+		pair.res.SetStatus(esStatus)
+	}
+
+	var resESPs []*ec2model.VPCEndpointServicePermissions
+	err = s.stack.ListResources(&resESPs)
+	if err != nil {
+		return err
+	}
+	s.logger.Info("Permission to reconcile", "permission", resESPs)
+	for _, permission := range resESPs {
+		err = s.esManager.ReconcilePermissions(ctx, permission)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -166,3 +178,73 @@ func mapSDKEndpointServiceByResourceID(sdkESs []networking.VPCEndpointServiceInf
 
 	return sdkESsByID, nil
 }
+
+// type resAndSDKEndpointServicePermissionsPair struct {
+// 	res *ec2model.VPCEndpointServicePermissions
+// 	sdk networking.VPCEndpointServicePermissionsInfo
+// }
+
+// func matchResAndSDKEndpointServicePermissions(resSGs []*ec2model.VPCEndpointServicePermissions, sdkSGs []networking.VPCEndpointServicePermissionsInfo,
+// 	resourceIDTagKey string) ([]resAndSDKEndpointServicePermissionsPair, error) {
+
+// 	var matchedResAndSDKESs []resAndSDKEndpointServicePair
+
+// 	resESsByID := mapResEndpointServiceByResourceID(resSGs)
+
+// 	sdkESsByID, err := mapSDKEndpointServiceByResourceID(sdkSGs, resourceIDTagKey)
+// 	if err != nil {
+// 		return nil, nil, nil, err
+// 	}
+
+// 	resESIDs := sets.StringKeySet(resESsByID)
+// 	sdkESIDs := sets.StringKeySet(sdkESsByID)
+
+// 	for _, resID := range resESIDs.Intersection(sdkESIDs).List() {
+// 		resES := resESsByID[resID]
+// 		sdkESs := sdkESsByID[resID]
+
+// 		matchedResAndSDKESs = append(matchedResAndSDKESs, resAndSDKEndpointServicePair{
+// 			res: resES,
+// 			sdk: sdkESs[0],
+// 		})
+
+// 		for _, sdkSG := range sdkSGs[1:] {
+// 			unmatchedSDKESs = append(unmatchedSDKESs, sdkSG)
+// 		}
+// 	}
+
+// 	for _, resID := range resESIDs.Difference(sdkESIDs).List() {
+// 		unmatchedResESs = append(unmatchedResESs, resESsByID[resID])
+// 	}
+
+// 	for _, resID := range sdkESIDs.Difference(resESIDs).List() {
+// 		unmatchedSDKESs = append(unmatchedSDKESs, sdkESsByID[resID]...)
+// 	}
+
+// 	return matchedResAndSDKESs, unmatchedResESs, unmatchedSDKESs, nil
+// }
+
+// func mapResEndpointServiceByResourceID(resESs []*ec2model.VPCEndpointService) map[string]*ec2model.VPCEndpointService {
+// 	resESsByID := make(map[string]*ec2model.VPCEndpointService, len(resESs))
+// 	for _, resES := range resESs {
+// 		resESsByID[resES.ID()] = resES
+// 	}
+
+// 	return resESsByID
+// }
+
+// func mapSDKEndpointServiceByResourceID(sdkESs []networking.VPCEndpointServiceInfo,
+// 	resourceIDTagKey string) (map[string][]networking.VPCEndpointServiceInfo, error) {
+// 	sdkESsByID := make(map[string][]networking.VPCEndpointServiceInfo, len(sdkESs))
+
+// 	for _, sdkES := range sdkESs {
+// 		resourceID, ok := sdkES.Tags[resourceIDTagKey]
+// 		if !ok {
+// 			return nil, errors.Errorf("unexpected VPCEndpointService with no resourceID: %v", sdkES.ServiceID)
+// 		}
+
+// 		sdkESsByID[resourceID] = append(sdkESsByID[resourceID], sdkES)
+// 	}
+
+// 	return sdkESsByID, nil
+// }
