@@ -279,7 +279,7 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServicePermissionsInput) (networking.VPCEndpointServicePermissionsInfo, error) {
 	endpointServicePermissions, err := m.ec2Client.DescribeVpcEndpointServicePermissionsWithContext(ctx, req)
 	if err != nil {
-		return networking.VPCEndpointServicePermissionsInfo{}, err
+		return networking.VPCEndpointServicePermissionsInfo{}, errors.Wrap(err, "Failed to fetch VPCEndpointPermissions from AWS")
 	}
 	return networking.NewRawVPCEndpointServicePermissionsInfo(endpointServicePermissions), nil
 }
