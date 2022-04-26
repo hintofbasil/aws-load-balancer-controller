@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	awssdk "github.com/aws/aws-sdk-go/aws"
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
 	"github.com/golang/mock/gomock"
@@ -29,6 +31,65 @@ func (t testStringToken) Resolve(ctx context.Context) (string, error) {
 type DescribeVpcEndpointServicePermissionsWithContextResponse struct {
 	response *ec2sdk.DescribeVpcEndpointServicePermissionsOutput
 	err      error
+}
+
+func Test_Delete(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	serviceID := "serviceID"
+	sdkES := networking.VPCEndpointServiceInfo{
+		ServiceID: serviceID,
+	}
+
+	ctx := context.TODO()
+
+	tests := []struct {
+		name                       string
+		deleteResponseError        error
+		waitESDeletionPollInterval time.Duration
+		waitESDeletionTimeout      time.Duration
+	}{
+		{
+			name:                "calls delete with expected arguments",
+			deleteResponseError: nil,
+		},
+		{
+			name:                "returns an error if the delete call returns an error",
+			deleteResponseError: errors.New("test_error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockEC2 := services.NewMockEC2(mockCtrl)
+			manager := NewDefaultEndpointServiceManager(
+				mockEC2,
+				"vpcID",
+				logr.DiscardLogger{},
+				tracking.NewDefaultProvider("", ""),
+			)
+			req := &ec2sdk.DeleteVpcEndpointServiceConfigurationsInput{
+				ServiceIds: awssdk.StringSlice(
+					[]string{serviceID},
+				),
+			}
+
+			mockEC2.EXPECT().DeleteVpcEndpointServiceConfigurationsWithContext(ctx, gomock.Eq(req)).Return(
+				// We never use this return value
+				nil,
+				tt.deleteResponseError,
+			).Times(1)
+
+			err := manager.Delete(ctx, sdkES)
+
+			if tt.deleteResponseError != nil {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func Test_ReconcilePermissions(t *testing.T) {

@@ -13,12 +13,6 @@ import (
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/deploy/tracking"
 	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/networking"
-	"sigs.k8s.io/aws-load-balancer-controller/pkg/runtime"
-)
-
-const (
-	defaultWaitESDeletionPollInterval = 2 * time.Second
-	defaultWaitESDeletionTimeout      = 2 * time.Minute
 )
 
 // abstraction around endpoint service operations for EC2.
@@ -45,9 +39,6 @@ func NewDefaultEndpointServiceManager(ec2Client services.EC2, vpcID string, logg
 		vpcID:            vpcID,
 		logger:           logger,
 		trackingProvider: trackingProvider,
-
-		waitESDeletionPollInterval: defaultWaitESDeletionPollInterval,
-		waitESDeletionTimeout:      defaultWaitESDeletionTimeout,
 	}
 }
 
@@ -202,11 +193,8 @@ func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networ
 
 	m.logger.Info("deleting VPCEndpointService",
 		"serviceId", sdkES.ServiceID)
-	if err := runtime.RetryImmediateOnError(m.waitESDeletionPollInterval, m.waitESDeletionTimeout, isSecurityGroupDependencyViolationError, func() error {
-		_, err := m.ec2Client.DeleteVpcEndpointServiceConfigurationsWithContext(ctx, req)
+	if _, err := m.ec2Client.DeleteVpcEndpointServiceConfigurationsWithContext(ctx, req); err != nil {
 		return err
-	}); err != nil {
-		return errors.Wrap(err, "failed to delete VPCEndpointService")
 	}
 	m.logger.Info("deleted VPCEndpointService",
 		"serviceId", sdkES.ServiceID)
