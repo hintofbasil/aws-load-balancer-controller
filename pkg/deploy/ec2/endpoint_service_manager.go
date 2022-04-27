@@ -2,7 +2,6 @@ package ec2
 
 import (
 	"context"
-	"time"
 
 	awssdk "github.com/aws/aws-sdk-go/aws"
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
@@ -50,9 +49,6 @@ type defaultEndpointServiceManager struct {
 	vpcID            string
 	logger           logr.Logger
 	trackingProvider tracking.Provider
-
-	waitESDeletionPollInterval time.Duration
-	waitESDeletionTimeout      time.Duration
 }
 
 func (m *defaultEndpointServiceManager) ReconcileTags(ctx context.Context, resID string, desiredTags map[string]string, opts ...ReconcileTagsOption) error {
@@ -134,7 +130,7 @@ func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2mo
 	}
 
 	var acceptanceRequired *bool
-	if *resES.Spec.AcceptanceRequired != sdkES.AcceptanceRequired {
+	if resES.Spec.AcceptanceRequired != nil && *resES.Spec.AcceptanceRequired != sdkES.AcceptanceRequired {
 		acceptanceRequired = resES.Spec.AcceptanceRequired
 	}
 
@@ -273,6 +269,5 @@ func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx contex
 }
 
 func newBoolPointer(value bool) *bool {
-	b := value
-	return &b
+	return &value
 }

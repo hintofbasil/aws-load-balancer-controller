@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/deploy/tracking"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/model/core"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
+	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/networking"
 )
 
@@ -31,6 +32,228 @@ func (t testStringToken) Resolve(ctx context.Context) (string, error) {
 type DescribeVpcEndpointServicePermissionsWithContextResponse struct {
 	response *ec2sdk.DescribeVpcEndpointServicePermissionsOutput
 	err      error
+}
+
+func Test_Update_responses(t *testing.T) {
+	lbArn := "lbArn"
+	privateDNSName := "http://example.com"
+	serviceID := "serviceID"
+	ctx := context.TODO()
+
+	tests := []struct {
+		name               string
+		nlbResolveError    error
+		modifyAPICallError error
+		shouldError        bool
+	}{
+		{
+			name:               "returns an error when the service id can't be resolved",
+			nlbResolveError:    errors.New("test_error"),
+			modifyAPICallError: nil,
+			shouldError:        true,
+		},
+		{
+			name:               "returns an error when the API call returns an error",
+			nlbResolveError:    nil,
+			modifyAPICallError: errors.New("test_error"),
+			shouldError:        true,
+		},
+		{
+			name:               "returns correctly with no errors",
+			nlbResolveError:    nil,
+			modifyAPICallError: nil,
+			shouldError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{
+					AcceptanceRequired: newBoolPointer(false),
+					NetworkLoadBalancerArns: []core.StringToken{
+						testStringToken{
+							value: lbArn,
+							err:   tt.nlbResolveError,
+						},
+					},
+					PrivateDNSName: &privateDNSName,
+				},
+			}
+			sdk := networking.VPCEndpointServiceInfo{
+				ServiceID: serviceID,
+			}
+
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			mockEC2 := services.NewMockEC2(mockCtrl)
+			if tt.nlbResolveError == nil {
+				mockEC2.EXPECT().ModifyVpcEndpointServiceConfigurationWithContext(ctx, gomock.Any()).Return(
+					// We don't use this value
+					nil,
+					tt.modifyAPICallError,
+				).Times(1)
+			}
+
+			manager := NewDefaultEndpointServiceManager(
+				mockEC2,
+				"vpcID",
+				logr.DiscardLogger{},
+				tracking.NewDefaultProvider("", ""),
+			)
+
+			resp, err := manager.Update(ctx, res, sdk)
+
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, resp.ServiceID, serviceID)
+			}
+		})
+	}
+}
+
+func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
+	lbArn := "lbArn"
+	privateDNSName := "http://example.com"
+	serviceID := "serviceID"
+	ctx := context.TODO()
+
+	tests := []struct {
+		name string
+		res  *ec2model.VPCEndpointService
+		sdk  networking.VPCEndpointServiceInfo
+		req  *ec2sdk.ModifyVpcEndpointServiceConfigurationInput
+	}{
+		{
+			name: "AcceptanceRequired gets set in input",
+			res: &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{
+					AcceptanceRequired: newBoolPointer(true),
+				},
+			},
+			sdk: networking.VPCEndpointServiceInfo{
+				AcceptanceRequired: false,
+				ServiceID:          serviceID,
+			},
+			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+				AcceptanceRequired:            newBoolPointer(true),
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
+				PrivateDnsName:                nil,
+				RemovePrivateDnsName:          nil,
+				ServiceId:                     &serviceID,
+			},
+		},
+		{
+			name: "AddNetworkLoadBalancerArns gets set in input",
+			res: &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{
+					NetworkLoadBalancerArns: []core.StringToken{
+						testStringToken{
+							value: lbArn,
+							err:   nil,
+						},
+					},
+				},
+			},
+			sdk: networking.VPCEndpointServiceInfo{
+				ServiceID: serviceID,
+			},
+			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+				AcceptanceRequired:            nil,
+				AddNetworkLoadBalancerArns:    []*string{&lbArn},
+				RemoveNetworkLoadBalancerArns: nil,
+				PrivateDnsName:                nil,
+				RemovePrivateDnsName:          nil,
+				ServiceId:                     &serviceID,
+			},
+		},
+		{
+			name: "RemoveNetworkLoadBalancerArns gets set in input",
+			res: &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{},
+			},
+			sdk: networking.VPCEndpointServiceInfo{
+				NetworkLoadBalancerArns: []string{lbArn},
+				ServiceID:               serviceID,
+			},
+			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+				AcceptanceRequired:            nil,
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: []*string{&lbArn},
+				PrivateDnsName:                nil,
+				RemovePrivateDnsName:          nil,
+				ServiceId:                     &serviceID,
+			},
+		},
+		{
+			name: "PrivateDnsName gets set in input",
+			res: &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{
+					PrivateDNSName: &privateDNSName,
+				},
+			},
+			sdk: networking.VPCEndpointServiceInfo{
+				ServiceID: serviceID,
+			},
+			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+				AcceptanceRequired:            nil,
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
+				PrivateDnsName:                &privateDNSName,
+				RemovePrivateDnsName:          nil,
+				ServiceId:                     &serviceID,
+			},
+		},
+		{
+			name: "RemovePrivateDnsName gets set in input",
+			res: &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{},
+			},
+			sdk: networking.VPCEndpointServiceInfo{
+				PrivateDNSName: &privateDNSName,
+				ServiceID:      serviceID,
+			},
+			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
+				AcceptanceRequired:            nil,
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
+				PrivateDnsName:                nil,
+				RemovePrivateDnsName:          newBoolPointer(true),
+				ServiceId:                     &serviceID,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			mockEC2 := services.NewMockEC2(mockCtrl)
+			mockEC2.EXPECT().ModifyVpcEndpointServiceConfigurationWithContext(ctx, gomock.Eq(tt.req)).Return(
+				// We don't use this value
+				nil,
+				nil,
+			).Times(1)
+
+			manager := NewDefaultEndpointServiceManager(
+				mockEC2,
+				"vpcID",
+				logr.DiscardLogger{},
+				tracking.NewDefaultProvider("", ""),
+			)
+
+			resp, err := manager.Update(ctx, tt.res, tt.sdk)
+
+			assert.NoError(t, err)
+			assert.Equal(t, resp.ServiceID, serviceID)
+		})
+	}
 }
 
 func Test_Delete(t *testing.T) {
