@@ -137,7 +137,7 @@ func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2mo
 	var privateDNSName *string
 	var removePrivateDNSName *bool
 	if resES.Spec.PrivateDNSName == nil && sdkES.PrivateDNSName != nil {
-		removePrivateDNSName = newBoolPointer(true)
+		removePrivateDNSName = awssdk.Bool(true)
 	} else if resES.Spec.PrivateDNSName != sdkES.PrivateDNSName {
 		privateDNSName = resES.Spec.PrivateDNSName
 	}
@@ -266,8 +266,4 @@ func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx contex
 		return networking.VPCEndpointServicePermissionsInfo{}, errors.Wrap(err, "Failed to fetch VPCEndpointPermissions from AWS")
 	}
 	return networking.NewRawVPCEndpointServicePermissionsInfo(endpointServicePermissions), nil
-}
-
-func newBoolPointer(value bool) *bool {
-	return &value
 }

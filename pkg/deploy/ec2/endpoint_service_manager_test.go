@@ -29,9 +29,124 @@ func (t testStringToken) Resolve(ctx context.Context) (string, error) {
 	return t.value, t.err
 }
 
+type mockProvider struct {
+	tracking.Provider
+}
+
+func (p *mockProvider) ResourceTags(_ core.Stack, _ core.Resource, _ map[string]string) map[string]string {
+	return map[string]string{
+		"key": "value",
+	}
+}
+
 type DescribeVpcEndpointServicePermissionsWithContextResponse struct {
 	response *ec2sdk.DescribeVpcEndpointServicePermissionsOutput
 	err      error
+}
+
+func Test_Create(t *testing.T) {
+	lbArn := "lbArn"
+	privateDNSName := "http://example.com"
+	serviceID := "serviceID"
+	tags := map[string]string{
+		"key": "value",
+	}
+	ctx := context.TODO()
+
+	tests := []struct {
+		name               string
+		nlbResolveError    error
+		createAPICallError error
+		shouldError        bool
+	}{
+		{
+			name:               "returns an error when the service id can't be resolved",
+			nlbResolveError:    errors.New("test_error"),
+			createAPICallError: nil,
+			shouldError:        true,
+		},
+		{
+			name:               "returns an error when the API call returns an error",
+			nlbResolveError:    nil,
+			createAPICallError: errors.New("test_error"),
+			shouldError:        true,
+		},
+		{
+			name:               "returns correctly with no errors",
+			nlbResolveError:    nil,
+			createAPICallError: nil,
+			shouldError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &ec2model.VPCEndpointService{
+				Spec: ec2model.VPCEndpointServiceSpec{
+					AcceptanceRequired: awssdk.Bool(false),
+					NetworkLoadBalancerArns: []core.StringToken{
+						testStringToken{
+							value: lbArn,
+							err:   tt.nlbResolveError,
+						},
+					},
+					PrivateDNSName: &privateDNSName,
+					Tags:           tags,
+				},
+			}
+
+			mockCtrl := gomock.NewController(t)
+			defer mockCtrl.Finish()
+
+			mockEC2 := services.NewMockEC2(mockCtrl)
+			if tt.nlbResolveError == nil {
+				req := &ec2sdk.CreateVpcEndpointServiceConfigurationInput{
+					AcceptanceRequired:      awssdk.Bool(false),
+					PrivateDnsName:          &privateDNSName,
+					NetworkLoadBalancerArns: []*string{&lbArn},
+					TagSpecifications: []*ec2sdk.TagSpecification{
+						{
+							ResourceType: awssdk.String("vpc-endpoint-service"),
+							Tags: []*ec2sdk.Tag{
+								{
+									Key:   awssdk.String("key"),
+									Value: awssdk.String("value"),
+								},
+							},
+						},
+					},
+				}
+				mockEC2.EXPECT().CreateVpcEndpointServiceConfigurationWithContext(
+					ctx,
+					gomock.Eq(req),
+				).Return(
+					&ec2sdk.CreateVpcEndpointServiceConfigurationOutput{
+						ServiceConfiguration: &ec2sdk.ServiceConfiguration{
+							ServiceId: &serviceID,
+						},
+					},
+					tt.createAPICallError,
+				).Times(1)
+			}
+
+			manager := NewDefaultEndpointServiceManager(
+				mockEC2,
+				"vpcID",
+				logr.DiscardLogger{},
+				&mockProvider{},
+			)
+
+			resp, err := manager.Create(ctx, res)
+
+			if tt.shouldError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, resp.ServiceID, serviceID)
+				assert.Equal(t, resp.ServiceID, serviceID)
+			}
+		})
+	}
 }
 
 func Test_Update_responses(t *testing.T) {
@@ -70,7 +185,7 @@ func Test_Update_responses(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			res := &ec2model.VPCEndpointService{
 				Spec: ec2model.VPCEndpointServiceSpec{
-					AcceptanceRequired: newBoolPointer(false),
+					AcceptanceRequired: awssdk.Bool(false),
 					NetworkLoadBalancerArns: []core.StringToken{
 						testStringToken{
 							value: lbArn,
@@ -131,7 +246,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			name: "AcceptanceRequired gets set in input",
 			res: &ec2model.VPCEndpointService{
 				Spec: ec2model.VPCEndpointServiceSpec{
-					AcceptanceRequired: newBoolPointer(true),
+					AcceptanceRequired: awssdk.Bool(true),
 				},
 			},
 			sdk: networking.VPCEndpointServiceInfo{
@@ -139,7 +254,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 				ServiceID:          serviceID,
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
-				AcceptanceRequired:            newBoolPointer(true),
+				AcceptanceRequired:            awssdk.Bool(true),
 				AddNetworkLoadBalancerArns:    nil,
 				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                nil,
@@ -222,7 +337,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 				AddNetworkLoadBalancerArns:    nil,
 				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                nil,
-				RemovePrivateDnsName:          newBoolPointer(true),
+				RemovePrivateDnsName:          awssdk.Bool(true),
 				ServiceId:                     &serviceID,
 			},
 		},
