@@ -28,15 +28,8 @@ func (t *defaultModelBuildTask) buildEndpointService(ctx context.Context) error 
 		return err
 	}
 
-	allowedPrinciples, err := t.buildAllowedPrinciples(ctx)
-	if err != nil {
-		return err
-	}
-
-	privateDNSName, err := t.buildPrivateDNSName(ctx)
-	if err != nil {
-		return err
-	}
+	allowedPrinciples := t.buildAllowedPrinciples(ctx)
+	privateDNSName := t.buildPrivateDNSName(ctx)
 
 	tags, err := t.buildListenerTags(ctx)
 	if err != nil {
@@ -90,20 +83,18 @@ func (t *defaultModelBuildTask) buildAcceptanceRequired(_ context.Context) (bool
 	}
 }
 
-func (t *defaultModelBuildTask) buildAllowedPrinciples(_ context.Context) ([]string, error) {
+func (t *defaultModelBuildTask) buildAllowedPrinciples(_ context.Context) []string {
 	var rawAllowedPrinciples []string
-	_ = t.annotationParser.ParseStringSliceAnnotation(annotations.SvcLBSuffixEndpointServiceAllowedPrincipals, &rawAllowedPrinciples, t.service.Annotations)
-	// TODO do we need to validate there is atleast one?
-	// if rawAllowedPrinciples == "" {
-	// 	return "", errors.Errorf("invalid service annotation %v, must not be empty", annotations.SvcLBSuffixEndpointServiceAllowedPrincipals)
-	// }
-	return rawAllowedPrinciples, nil
+	if exists := t.annotationParser.ParseStringSliceAnnotation(annotations.SvcLBSuffixEndpointServiceAllowedPrincipals, &rawAllowedPrinciples, t.service.Annotations); !exists {
+		return []string{}
+	}
+	return rawAllowedPrinciples
 }
 
-func (t *defaultModelBuildTask) buildPrivateDNSName(_ context.Context) (*string, error) {
+func (t *defaultModelBuildTask) buildPrivateDNSName(_ context.Context) *string {
 	rawPrivateDNSName := ""
 	if exists := t.annotationParser.ParseStringAnnotation(annotations.SvcLBSuffixEndpointServicePrivateDNSName, &rawPrivateDNSName, t.service.Annotations); !exists {
-		return nil, nil
+		return nil
 	}
-	return &rawPrivateDNSName, nil
+	return &rawPrivateDNSName
 }
