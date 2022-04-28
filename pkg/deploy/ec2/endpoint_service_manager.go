@@ -19,9 +19,6 @@ type EndpointServiceManager interface {
 	// ReconcileTags will reconcile tags on resources.
 	ReconcileTags(ctx context.Context, resID string, desiredTags map[string]string, opts ...ReconcileTagsOption) error
 
-	// ListEndpointServices returns VPC Endpoint Services that matches any of the tagging requirements.
-	ListEndpointServices(ctx context.Context, tagFilters ...tracking.TagFilter) ([]ec2model.VPCEndpointService, error)
-
 	Create(ctx context.Context, resES *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
 
 	Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error)

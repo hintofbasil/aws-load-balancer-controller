@@ -208,16 +208,9 @@ func (m *defaultTaggingManager) ListVPCEndpointServices(ctx context.Context, tag
 
 func (m *defaultTaggingManager) listVPCEndpointServicesWithTagFilter(ctx context.Context, tagFilter tracking.TagFilter) (map[string]networking.VPCEndpointServiceInfo, error) {
 	req := &ec2sdk.DescribeVpcEndpointServiceConfigurationsInput{
-		Filters: []*ec2sdk.Filter{
-			// TODO Illegal filter - is there something better?
-			// 	{
-			// 		Name:   awssdk.String("vpc-id"),
-			// 		Values: awssdk.StringSlice([]string{m.vpcID}),
-			// 	},
-		},
+		Filters: []*ec2sdk.Filter{},
 	}
 
-	// TODO understand these filters
 	for _, tagKey := range sets.StringKeySet(tagFilter).List() {
 		tagValues := tagFilter[tagKey]
 		var filter ec2sdk.Filter
