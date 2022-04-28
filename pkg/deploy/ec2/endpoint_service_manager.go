@@ -52,10 +52,6 @@ func (m *defaultEndpointServiceManager) ReconcileTags(ctx context.Context, resID
 	return nil
 }
 
-func (m *defaultEndpointServiceManager) ListEndpointServices(ctx context.Context, tagFilters ...tracking.TagFilter) ([]ec2model.VPCEndpointService, error) {
-	return nil, nil
-}
-
 func (m *defaultEndpointServiceManager) Create(ctx context.Context, resSG *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error) {
 	sgTags := m.trackingProvider.ResourceTags(resSG.Stack(), resSG, resSG.Spec.Tags)
 	sdkTags := convertTagsToSDKTags(sgTags)
@@ -187,7 +183,7 @@ func (m *defaultEndpointServiceManager) Delete(ctx context.Context, sdkES networ
 	m.logger.Info("deleting VPCEndpointService",
 		"serviceId", sdkES.ServiceID)
 	if _, err := m.ec2Client.DeleteVpcEndpointServiceConfigurationsWithContext(ctx, req); err != nil {
-		return err
+		return errors.Wrap(err, "failed to delete VPCEndpointService")
 	}
 	m.logger.Info("deleted VPCEndpointService",
 		"serviceId", sdkES.ServiceID)
@@ -200,8 +196,7 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 
 	serviceId, err := permissions.Spec.ServiceId.Resolve(ctx)
 	if err != nil {
-		m.logger.Info("Failed to resolve serviceId", "err", err)
-		return err
+		return errors.Wrap(err, "Failed to resolve VPCEndpointServicePermissions serviceID")
 	}
 	req := &ec2sdk.DescribeVpcEndpointServicePermissionsInput{
 		ServiceId: &serviceId,
@@ -212,7 +207,7 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 	permissionsInfo, err := m.fetchESPermissionInfosFromAWS(ctx, req)
 	if err != nil {
 		m.logger.Info("Error while fetching existing VPC endpoint service permissions")
-		return err
+		return errors.Wrap(err, "failed to fetch existing VPCEndpointServicePermissions")
 	}
 	sdkPrinciples := sets.NewString(permissionsInfo.AllowedPrincipals...)
 	resPrinciples := sets.NewString(permissions.Spec.AllowedPrinciples...)
@@ -247,7 +242,7 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 
 		_, err := m.ec2Client.ModifyVpcEndpointServicePermissionsWithContext(ctx, modReq)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to modify VPCEndpointServicePermissions")
 		}
 
 		m.logger.Info("modified VpcEndpointService permissions",

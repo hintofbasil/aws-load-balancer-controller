@@ -6,6 +6,7 @@ import (
 	awssdk "github.com/aws/aws-sdk-go/aws"
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/aws/services"
 )
 
@@ -62,17 +63,15 @@ func (m *defaultVPCEndpointServiceManager) FetchVPCESInfosByID(ctx context.Conte
 func (m *defaultVPCEndpointServiceManager) FetchVPCESInfosByRequest(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServiceConfigurationsInput) (map[string]VPCEndpointServiceInfo, error) {
 	esInfosByID, err := m.fetchESInfosFromAWS(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to fetch VPCEndpointService information from AWS")
 	}
-	// TODO caching??
-	// m.saveSGInfosToCache(sgInfosByID)
 	return esInfosByID, nil
 }
 
 func (m *defaultVPCEndpointServiceManager) fetchESInfosFromAWS(ctx context.Context, req *ec2sdk.DescribeVpcEndpointServiceConfigurationsInput) (map[string]VPCEndpointServiceInfo, error) {
 	endpointServices, err := m.ec2Client.DescribeVpcEndpointServicesAsList(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to describe VPCEndpointServices")
 	}
 	esInfoByID := make(map[string]VPCEndpointServiceInfo, len(endpointServices))
 	for _, es := range endpointServices {

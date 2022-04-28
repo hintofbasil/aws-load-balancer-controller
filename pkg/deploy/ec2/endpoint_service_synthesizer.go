@@ -55,14 +55,14 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 	// We delete before we create as we can only have a single VPC end point per LB
 	for _, sdkSG := range unmatchedSDKESs {
 		if err := s.esManager.Delete(ctx, sdkSG); err != nil {
-			return err
+			return errors.Wrap(err, "failed to delete VPCEndpointService")
 		}
 	}
 
 	for _, resES := range unmatchedResESs {
 		esStatus, err := s.esManager.Create(ctx, resES)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to create VPCEndpointService")
 		}
 		resES.SetStatus(esStatus)
 	}
@@ -70,7 +70,7 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 	for _, pair := range matchedResAndSDKESs {
 		esStatus, err := s.esManager.Update(ctx, pair.res, pair.sdk)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to update VPCEndpointService")
 		}
 		pair.res.SetStatus(esStatus)
 	}
@@ -84,7 +84,7 @@ func (s *endpointServiceSynthesizer) Synthesize(ctx context.Context) error {
 	for _, permission := range resESPs {
 		err = s.esManager.ReconcilePermissions(ctx, permission)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to reconcile VPCEndpointServicePermissions")
 		}
 	}
 
@@ -123,7 +123,7 @@ func matchResAndSDKEndpointServices(resSGs []*ec2model.VPCEndpointService, sdkSG
 
 	sdkESsByID, err := mapSDKEndpointServiceByResourceID(sdkSGs, resourceIDTagKey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, errors.Wrap(err, "failed to map VPCEndpointServices by ID")
 	}
 
 	resESIDs := sets.StringKeySet(resESsByID)
