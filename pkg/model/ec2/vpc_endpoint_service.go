@@ -52,11 +52,11 @@ func (es *VPCEndpointService) ServiceID() core.StringToken {
 // VPCEndpointServiceSpec defines the desired state of VPCEndpointService
 type VPCEndpointServiceSpec struct {
 	// whether requests from service consumers to create an endpoint to the service must be accepted
-	AcceptanceRequired *bool `json:"acceptance_required"`
+	AcceptanceRequired *bool `json:"acceptanceRequired"`
 
-	NetworkLoadBalancerArns []core.StringToken `json:"network_load_balancer_arns"`
+	NetworkLoadBalancerArns []core.StringToken `json:"networkLoadBalancerArns"`
 
-	PrivateDNSName *string `json:"private_dns_name"`
+	PrivateDNSName *string `json:"privateDnsName"`
 
 	// +optional
 	Tags map[string]string `json:"tags,omitempty"`
@@ -67,7 +67,7 @@ type VPCEndpointServiceStatus struct {
 	// The ID of the endpoint service.
 	ServiceID string `json:"serviceID"`
 
-	BaseEndpointDnsNames []string `json:"base_endpoint_dns_names"`
+	BaseEndpointDnsNames []string `json:"baseEndpointDnsNames"`
 }
 
 type VPCEndpointServicePermissions struct {
@@ -86,6 +86,6 @@ func NewVPCEndpointServicePermissions(stack core.Stack, id string, spec VPCEndpo
 }
 
 type VPCEndpointServicePermissionsSpec struct {
-	AllowedPrinciples []string         `json:"allowed_principles"`
-	ServiceId         core.StringToken `json:"service_id"`
+	AllowedPrinciples []string         `json:"allowedPrinciples"`
+	ServiceId         core.StringToken `json:"serviceID"`
 }
