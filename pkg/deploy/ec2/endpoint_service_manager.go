@@ -7,7 +7,7 @@ import (
 	ec2sdk "github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/aws-load-balancer-controller/pkg/algorithm"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/aws/services"
 	"sigs.k8s.io/aws-load-balancer-controller/pkg/deploy/tracking"
 	ec2model "sigs.k8s.io/aws-load-balancer-controller/pkg/model/ec2"
@@ -115,17 +115,7 @@ func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2mo
 		return ec2model.VPCEndpointServiceStatus{}, err
 	}
 
-	sdkLBArns := sets.NewString(sdkES.NetworkLoadBalancerArns...)
-	resLBArns := sets.NewString(resLBArnsRaw...)
-
-	// TODO move this to algorithm
-	var addLBArns, removeLBArns []*string
-	for _, arn := range resLBArns.Difference(sdkLBArns).List() {
-		addLBArns = append(addLBArns, &arn)
-	}
-	for _, arn := range sdkLBArns.Difference(resLBArns).List() {
-		removeLBArns = append(removeLBArns, &arn)
-	}
+	addLBArns, _, removeLBArns := algorithm.DiffStringSlice(resLBArnsRaw, sdkES.NetworkLoadBalancerArns)
 
 	var acceptanceRequired *bool
 	if resES.Spec.AcceptanceRequired != nil && *resES.Spec.AcceptanceRequired != sdkES.AcceptanceRequired {
@@ -214,17 +204,8 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 		m.logger.Info("Error while fetching existing VPC endpoint service permissions")
 		return errors.Wrap(err, "failed to fetch existing VPCEndpointServicePermissions")
 	}
-	sdkPrinciples := sets.NewString(permissionsInfo.AllowedPrincipals...)
-	resPrinciples := sets.NewString(permissions.Spec.AllowedPrinciples...)
 
-	// TODO move this to algorithm
-	var addPrinciples, removePrinciples []*string
-	for _, principle := range resPrinciples.Difference(sdkPrinciples).List() {
-		addPrinciples = append(addPrinciples, &principle)
-	}
-	for _, principle := range sdkPrinciples.Difference(resPrinciples).List() {
-		removePrinciples = append(removePrinciples, &principle)
-	}
+	addPrinciples, _, removePrinciples := algorithm.DiffStringSlice(permissions.Spec.AllowedPrinciples, permissionsInfo.AllowedPrincipals)
 
 	modReq := &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
 		AddAllowedPrincipals:    addPrinciples,

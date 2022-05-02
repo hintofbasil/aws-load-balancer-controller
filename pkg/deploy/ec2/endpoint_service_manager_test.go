@@ -51,7 +51,7 @@ func Test_Create(t *testing.T) {
 	tags := map[string]string{
 		"key": "value",
 	}
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tests := []struct {
 		name               string
@@ -159,7 +159,7 @@ func Test_Update_responses(t *testing.T) {
 	lbArn := "lbArn"
 	privateDNSName := "http://example.com"
 	serviceID := "serviceID"
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tests := []struct {
 		name               string
@@ -271,7 +271,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 	lbArn := "lbArn"
 	privateDNSName := "http://example.com"
 	serviceID := "serviceID"
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	stack := core.NewDefaultStack(core.StackID{Namespace: "namespace", Name: "name"})
 	tests := []struct {
@@ -294,8 +294,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            awssdk.Bool(true),
-				AddNetworkLoadBalancerArns:    nil,
-				RemoveNetworkLoadBalancerArns: nil,
+				AddNetworkLoadBalancerArns:    []*string{},
+				RemoveNetworkLoadBalancerArns: []*string{},
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -320,7 +320,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
 				AddNetworkLoadBalancerArns:    []*string{&lbArn},
-				RemoveNetworkLoadBalancerArns: nil,
+				RemoveNetworkLoadBalancerArns: []*string{},
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -338,7 +338,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    nil,
+				AddNetworkLoadBalancerArns:    []*string{},
 				RemoveNetworkLoadBalancerArns: []*string{&lbArn},
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
@@ -358,8 +358,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    nil,
-				RemoveNetworkLoadBalancerArns: nil,
+				AddNetworkLoadBalancerArns:    []*string{},
+				RemoveNetworkLoadBalancerArns: []*string{},
 				PrivateDnsName:                &privateDNSName,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -377,8 +377,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    nil,
-				RemoveNetworkLoadBalancerArns: nil,
+				AddNetworkLoadBalancerArns:    []*string{},
+				RemoveNetworkLoadBalancerArns: []*string{},
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          awssdk.Bool(true),
 				ServiceId:                     &serviceID,
@@ -439,7 +439,7 @@ func Test_Delete(t *testing.T) {
 		ServiceID: serviceID,
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tests := []struct {
 		name                       string
@@ -503,7 +503,7 @@ func Test_ReconcilePermissions(t *testing.T) {
 		ServiceId: &serviceID,
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	tests := []struct {
 		name                                                  string
 		desiredAllowedPrinciples                              []string
@@ -550,8 +550,9 @@ func Test_ReconcilePermissions(t *testing.T) {
 				err: nil,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
-				AddAllowedPrincipals: []*string{&principleName},
-				ServiceId:            &serviceID,
+				AddAllowedPrincipals:    []*string{&principleName},
+				RemoveAllowedPrincipals: []*string{},
+				ServiceId:               &serviceID,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextError: errors.New("test_error"),
 			expectError: true,
@@ -566,8 +567,9 @@ func Test_ReconcilePermissions(t *testing.T) {
 				err: nil,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
-				AddAllowedPrincipals: []*string{&principleName},
-				ServiceId:            &serviceID,
+				AddAllowedPrincipals:    []*string{&principleName},
+				RemoveAllowedPrincipals: []*string{},
+				ServiceId:               &serviceID,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextError: nil,
 			expectError: false,
@@ -586,6 +588,7 @@ func Test_ReconcilePermissions(t *testing.T) {
 				err: nil,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
+				AddAllowedPrincipals:    []*string{},
 				RemoveAllowedPrincipals: []*string{&principleName},
 				ServiceId:               &serviceID,
 			},
@@ -648,7 +651,7 @@ func Test_fetchESPermissionInfosFromAWS(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	pricipalNames := []string{"principle1", "principle2"}
 	req := &ec2sdk.DescribeVpcEndpointServicePermissionsInput{}
 

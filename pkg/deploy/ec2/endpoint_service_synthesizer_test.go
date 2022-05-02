@@ -21,7 +21,7 @@ func Test_synthesize_createFlow(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	mockEC2 := services.NewMockEC2(mockCtrl)
 	mockTaggingManager := NewMockTaggingManager(mockCtrl)
@@ -62,7 +62,7 @@ func Test_synthesize_deleteFlow(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	mockEC2 := services.NewMockEC2(mockCtrl)
 	mockTaggingManager := NewMockTaggingManager(mockCtrl)
@@ -104,7 +104,7 @@ func Test_synthesize_updateFlow(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	mockEC2 := services.NewMockEC2(mockCtrl)
 	mockTaggingManager := NewMockTaggingManager(mockCtrl)
@@ -157,7 +157,7 @@ func Test_synthesize_errorFlow(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	tests := []struct {
 		name                      string
