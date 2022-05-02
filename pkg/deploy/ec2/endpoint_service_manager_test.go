@@ -164,24 +164,35 @@ func Test_Update_responses(t *testing.T) {
 	tests := []struct {
 		name               string
 		nlbResolveError    error
+		reconcileTagsError error
 		modifyAPICallError error
 		shouldError        bool
 	}{
 		{
 			name:               "returns an error when the service id can't be resolved",
 			nlbResolveError:    errors.New("test_error"),
+			reconcileTagsError: nil,
+			modifyAPICallError: nil,
+			shouldError:        true,
+		},
+		{
+			name:               "returns an error when tag reconciliation returns an error",
+			nlbResolveError:    nil,
+			reconcileTagsError: errors.New("test_error"),
 			modifyAPICallError: nil,
 			shouldError:        true,
 		},
 		{
 			name:               "returns an error when the API call returns an error",
 			nlbResolveError:    nil,
+			reconcileTagsError: nil,
 			modifyAPICallError: errors.New("test_error"),
 			shouldError:        true,
 		},
 		{
 			name:               "returns correctly with no errors",
 			nlbResolveError:    nil,
+			reconcileTagsError: nil,
 			modifyAPICallError: nil,
 			shouldError:        false,
 		},
@@ -210,15 +221,6 @@ func Test_Update_responses(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
 			defer mockCtrl.Finish()
 
-			mockEC2 := services.NewMockEC2(mockCtrl)
-			if tt.nlbResolveError == nil {
-				mockEC2.EXPECT().ModifyVpcEndpointServiceConfigurationWithContext(ctx, gomock.Any()).Return(
-					// We don't use this value
-					nil,
-					tt.modifyAPICallError,
-				).Times(1)
-			}
-
 			mockTaggingManager := NewMockTaggingManager(mockCtrl)
 			if tt.nlbResolveError == nil {
 				mockTaggingManager.EXPECT().ReconcileTags(
@@ -232,7 +234,16 @@ func Test_Update_responses(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
-				).Return(nil).Times(1)
+				).Return(tt.reconcileTagsError).Times(1)
+			}
+
+			mockEC2 := services.NewMockEC2(mockCtrl)
+			if tt.nlbResolveError == nil && tt.reconcileTagsError == nil {
+				mockEC2.EXPECT().ModifyVpcEndpointServiceConfigurationWithContext(ctx, gomock.Any()).Return(
+					// We don't use this value
+					nil,
+					tt.modifyAPICallError,
+				).Times(1)
 			}
 
 			manager := NewDefaultEndpointServiceManager(
