@@ -81,7 +81,9 @@ func Test_Create(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			stack := core.NewDefaultStack(core.StackID{Namespace: "namespace", Name: "name"})
 			res := &ec2model.VPCEndpointService{
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
 				Spec: ec2model.VPCEndpointServiceSpec{
 					AcceptanceRequired: awssdk.Bool(false),
 					NetworkLoadBalancerArns: []core.StringToken{
@@ -129,11 +131,15 @@ func Test_Create(t *testing.T) {
 				).Times(1)
 			}
 
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
+
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
 				&mockProvider{},
+				mockTaggingManager,
+				[]string{},
 			)
 
 			resp, err := manager.Create(ctx, res)
@@ -183,7 +189,9 @@ func Test_Update_responses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			stack := core.NewDefaultStack(core.StackID{Namespace: "namespace", Name: "name"})
 			res := &ec2model.VPCEndpointService{
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
 				Spec: ec2model.VPCEndpointServiceSpec{
 					AcceptanceRequired: awssdk.Bool(false),
 					NetworkLoadBalancerArns: []core.StringToken{
@@ -211,11 +219,29 @@ func Test_Update_responses(t *testing.T) {
 				).Times(1)
 			}
 
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
+			if tt.nlbResolveError == nil {
+				mockTaggingManager.EXPECT().ReconcileTags(
+					ctx,
+					serviceID,
+					map[string]string{
+						"service.k8s.aws/resource": "VPCEndpointService",
+						"service.k8s.aws/stack":    "namespace/name",
+						"elbv2.k8s.aws/cluster":    "clusterName",
+					},
+					gomock.Any(),
+					gomock.Any(),
+					gomock.Any(),
+				).Return(nil).Times(1)
+			}
+
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
-				tracking.NewDefaultProvider("", ""),
+				tracking.NewDefaultProvider("service.k8s.aws", "clusterName"),
+				mockTaggingManager,
+				[]string{},
 			)
 
 			resp, err := manager.Update(ctx, res, sdk)
@@ -236,6 +262,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 	serviceID := "serviceID"
 	ctx := context.TODO()
 
+	stack := core.NewDefaultStack(core.StackID{Namespace: "namespace", Name: "name"})
 	tests := []struct {
 		name string
 		res  *ec2model.VPCEndpointService
@@ -245,6 +272,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 		{
 			name: "AcceptanceRequired gets set in input",
 			res: &ec2model.VPCEndpointService{
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
 				Spec: ec2model.VPCEndpointServiceSpec{
 					AcceptanceRequired: awssdk.Bool(true),
 				},
@@ -265,6 +293,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 		{
 			name: "AddNetworkLoadBalancerArns gets set in input",
 			res: &ec2model.VPCEndpointService{
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
 				Spec: ec2model.VPCEndpointServiceSpec{
 					NetworkLoadBalancerArns: []core.StringToken{
 						testStringToken{
@@ -289,7 +318,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 		{
 			name: "RemoveNetworkLoadBalancerArns gets set in input",
 			res: &ec2model.VPCEndpointService{
-				Spec: ec2model.VPCEndpointServiceSpec{},
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
+				Spec:         ec2model.VPCEndpointServiceSpec{},
 			},
 			sdk: networking.VPCEndpointServiceInfo{
 				NetworkLoadBalancerArns: []string{lbArn},
@@ -307,6 +337,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 		{
 			name: "PrivateDnsName gets set in input",
 			res: &ec2model.VPCEndpointService{
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
 				Spec: ec2model.VPCEndpointServiceSpec{
 					PrivateDNSName: &privateDNSName,
 				},
@@ -326,7 +357,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 		{
 			name: "RemovePrivateDnsName gets set in input",
 			res: &ec2model.VPCEndpointService{
-				Spec: ec2model.VPCEndpointServiceSpec{},
+				ResourceMeta: core.NewResourceMeta(stack, "AWS::EC2::VPCEndpointService", "VPCEndpointService"),
+				Spec:         ec2model.VPCEndpointServiceSpec{},
 			},
 			sdk: networking.VPCEndpointServiceInfo{
 				PrivateDNSName: &privateDNSName,
@@ -356,11 +388,27 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 				nil,
 			).Times(1)
 
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
+			mockTaggingManager.EXPECT().ReconcileTags(
+				ctx,
+				serviceID,
+				map[string]string{
+					"service.k8s.aws/resource": "VPCEndpointService",
+					"service.k8s.aws/stack":    "namespace/name",
+					"elbv2.k8s.aws/cluster":    "clusterName",
+				},
+				gomock.Any(),
+				gomock.Any(),
+				gomock.Any(),
+			).Return(nil).Times(1)
+
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
-				tracking.NewDefaultProvider("", ""),
+				tracking.NewDefaultProvider("service.k8s.aws", "clusterName"),
+				mockTaggingManager,
+				[]string{},
 			)
 
 			resp, err := manager.Update(ctx, tt.res, tt.sdk)
@@ -401,11 +449,14 @@ func Test_Delete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockEC2 := services.NewMockEC2(mockCtrl)
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
 				tracking.NewDefaultProvider("", ""),
+				mockTaggingManager,
+				[]string{},
 			)
 			req := &ec2sdk.DeleteVpcEndpointServiceConfigurationsInput{
 				ServiceIds: awssdk.StringSlice(
@@ -535,11 +586,14 @@ func Test_ReconcilePermissions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockEC2 := services.NewMockEC2(mockCtrl)
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
 				tracking.NewDefaultProvider("", ""),
+				mockTaggingManager,
+				[]string{},
 			)
 
 			permissions := &ec2.VPCEndpointServicePermissions{
@@ -624,11 +678,14 @@ func Test_fetchESPermissionInfosFromAWS(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockEC2 := services.NewMockEC2(mockCtrl)
+			mockTaggingManager := NewMockTaggingManager(mockCtrl)
 			manager := NewDefaultEndpointServiceManager(
 				mockEC2,
 				"vpcID",
 				logr.DiscardLogger{},
 				tracking.NewDefaultProvider("", ""),
+				mockTaggingManager,
+				[]string{},
 			)
 			mockEC2.EXPECT().DescribeVpcEndpointServicePermissionsWithContext(ctx, req).Return(
 				tt.mockResponse.response,

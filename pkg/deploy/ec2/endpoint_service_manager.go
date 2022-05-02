@@ -16,9 +16,6 @@ import (
 
 // abstraction around endpoint service operations for EC2.
 type EndpointServiceManager interface {
-	// ReconcileTags will reconcile tags on resources.
-	ReconcileTags(ctx context.Context, resID string, desiredTags map[string]string, opts ...ReconcileTagsOption) error
-
 	Create(ctx context.Context, resES *ec2model.VPCEndpointService) (ec2model.VPCEndpointServiceStatus, error)
 
 	Update(ctx context.Context, resES *ec2model.VPCEndpointService, sdkES networking.VPCEndpointServiceInfo) (ec2model.VPCEndpointServiceStatus, error)
@@ -29,12 +26,14 @@ type EndpointServiceManager interface {
 }
 
 // NewdefaultEndpointServiceManager constructs new defaultEndpointServiceManager.
-func NewDefaultEndpointServiceManager(ec2Client services.EC2, vpcID string, logger logr.Logger, trackingProvider tracking.Provider) *defaultEndpointServiceManager {
+func NewDefaultEndpointServiceManager(ec2Client services.EC2, vpcID string, logger logr.Logger, trackingProvider tracking.Provider, taggingManager TaggingManager, externalManagedTags []string) *defaultEndpointServiceManager {
 	return &defaultEndpointServiceManager{
-		ec2Client:        ec2Client,
-		vpcID:            vpcID,
-		logger:           logger,
-		trackingProvider: trackingProvider,
+		ec2Client:           ec2Client,
+		vpcID:               vpcID,
+		logger:              logger,
+		taggingManager:      taggingManager,
+		trackingProvider:    trackingProvider,
+		externalManagedTags: externalManagedTags,
 	}
 }
 
@@ -42,10 +41,12 @@ var _ EndpointServiceManager = &defaultEndpointServiceManager{}
 
 // default implementation for EndpointServiceManager.
 type defaultEndpointServiceManager struct {
-	ec2Client        services.EC2
-	vpcID            string
-	logger           logr.Logger
-	trackingProvider tracking.Provider
+	ec2Client           services.EC2
+	vpcID               string
+	logger              logr.Logger
+	taggingManager      TaggingManager
+	trackingProvider    tracking.Provider
+	externalManagedTags []string
 }
 
 func (m *defaultEndpointServiceManager) ReconcileTags(ctx context.Context, resID string, desiredTags map[string]string, opts ...ReconcileTagsOption) error {
@@ -108,6 +109,10 @@ func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2mo
 			return ec2model.VPCEndpointServiceStatus{}, err
 		}
 		resLBArnsRaw = append(resLBArnsRaw, arn)
+	}
+
+	if err := m.updateSDKVPCEndpointServiceWithTags(ctx, resES, sdkES); err != nil {
+		return ec2model.VPCEndpointServiceStatus{}, err
 	}
 
 	sdkLBArns := sets.NewString(sdkES.NetworkLoadBalancerArns...)
@@ -258,4 +263,13 @@ func (m *defaultEndpointServiceManager) fetchESPermissionInfosFromAWS(ctx contex
 		return networking.VPCEndpointServicePermissionsInfo{}, errors.Wrap(err, "Failed to fetch VPCEndpointPermissions from AWS")
 	}
 	return networking.NewRawVPCEndpointServicePermissionsInfo(endpointServicePermissions), nil
+}
+
+func (m *defaultEndpointServiceManager) updateSDKVPCEndpointServiceWithTags(ctx context.Context, resVPCES *ec2model.VPCEndpointService, sdkVPCES networking.VPCEndpointServiceInfo) error {
+	desiredVPCESTags := m.trackingProvider.ResourceTags(resVPCES.Stack(), resVPCES, resVPCES.Spec.Tags)
+	return m.taggingManager.ReconcileTags(ctx, sdkVPCES.ServiceID, desiredVPCESTags,
+		WithCurrentTags(sdkVPCES.Tags),
+		WithIgnoredTagKeys(m.trackingProvider.LegacyTagKeys()),
+		WithIgnoredTagKeys(m.externalManagedTags),
+	)
 }
