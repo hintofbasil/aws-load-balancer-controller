@@ -294,8 +294,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            awssdk.Bool(true),
-				AddNetworkLoadBalancerArns:    []*string{},
-				RemoveNetworkLoadBalancerArns: []*string{},
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -320,7 +320,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
 				AddNetworkLoadBalancerArns:    []*string{&lbArn},
-				RemoveNetworkLoadBalancerArns: []*string{},
+				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -338,7 +338,7 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    []*string{},
+				AddNetworkLoadBalancerArns:    nil,
 				RemoveNetworkLoadBalancerArns: []*string{&lbArn},
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          nil,
@@ -358,8 +358,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    []*string{},
-				RemoveNetworkLoadBalancerArns: []*string{},
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                &privateDNSName,
 				RemovePrivateDnsName:          nil,
 				ServiceId:                     &serviceID,
@@ -377,8 +377,8 @@ func Test_Update_modifyVPCEndpointServiceConfigurationInput(t *testing.T) {
 			},
 			req: &ec2sdk.ModifyVpcEndpointServiceConfigurationInput{
 				AcceptanceRequired:            nil,
-				AddNetworkLoadBalancerArns:    []*string{},
-				RemoveNetworkLoadBalancerArns: []*string{},
+				AddNetworkLoadBalancerArns:    nil,
+				RemoveNetworkLoadBalancerArns: nil,
 				PrivateDnsName:                nil,
 				RemovePrivateDnsName:          awssdk.Bool(true),
 				ServiceId:                     &serviceID,
@@ -551,7 +551,7 @@ func Test_ReconcilePermissions(t *testing.T) {
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
 				AddAllowedPrincipals:    []*string{&principleName},
-				RemoveAllowedPrincipals: []*string{},
+				RemoveAllowedPrincipals: nil,
 				ServiceId:               &serviceID,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextError: errors.New("test_error"),
@@ -568,7 +568,7 @@ func Test_ReconcilePermissions(t *testing.T) {
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
 				AddAllowedPrincipals:    []*string{&principleName},
-				RemoveAllowedPrincipals: []*string{},
+				RemoveAllowedPrincipals: nil,
 				ServiceId:               &serviceID,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextError: nil,
@@ -588,7 +588,7 @@ func Test_ReconcilePermissions(t *testing.T) {
 				err: nil,
 			},
 			ModifyVpcEndpointServicePermissionsWithContextRequest: &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
-				AddAllowedPrincipals:    []*string{},
+				AddAllowedPrincipals:    nil,
 				RemoveAllowedPrincipals: []*string{&principleName},
 				ServiceId:               &serviceID,
 			},

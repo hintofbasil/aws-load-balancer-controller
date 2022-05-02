@@ -19,7 +19,6 @@ func DiffStringSlice(first, second []string) ([]*string, []*string, []*string) {
 	firstSet := sets.NewString(first...)
 	secondSet := sets.NewString(second...)
 
-	// var matchFirst, matchBoth, matchSecond []*string
 	matchFirst := make([]*string, 0)
 	matchBoth := make([]*string, 0)
 	matchSecond := make([]*string, 0)

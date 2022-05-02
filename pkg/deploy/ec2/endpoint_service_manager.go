@@ -116,6 +116,13 @@ func (m *defaultEndpointServiceManager) Update(ctx context.Context, resES *ec2mo
 	}
 
 	addLBArns, _, removeLBArns := algorithm.DiffStringSlice(resLBArnsRaw, sdkES.NetworkLoadBalancerArns)
+	// The API call expects these to be nil if no changes are required.  An empty list returns an error
+	if len(addLBArns) == 0 {
+		addLBArns = nil
+	}
+	if len(removeLBArns) == 0 {
+		removeLBArns = nil
+	}
 
 	var acceptanceRequired *bool
 	if resES.Spec.AcceptanceRequired != nil && *resES.Spec.AcceptanceRequired != sdkES.AcceptanceRequired {
@@ -206,7 +213,13 @@ func (m *defaultEndpointServiceManager) ReconcilePermissions(ctx context.Context
 	}
 
 	addPrinciples, _, removePrinciples := algorithm.DiffStringSlice(permissions.Spec.AllowedPrinciples, permissionsInfo.AllowedPrincipals)
-
+	// The API call expects these to be nil if no changes are required.  An empty list returns an error
+	if len(addPrinciples) == 0 {
+		addPrinciples = nil
+	}
+	if len(removePrinciples) == 0 {
+		removePrinciples = nil
+	}
 	modReq := &ec2sdk.ModifyVpcEndpointServicePermissionsInput{
 		AddAllowedPrincipals:    addPrinciples,
 		RemoveAllowedPrincipals: removePrinciples,
